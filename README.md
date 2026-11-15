@@ -1,10 +1,13 @@
 # AJAZZ_AK820_PRO_Custom_App
 
-**A Linux desktop app and command-line tool for the AJAZZ AK820 Pro keyboard.**
+**A desktop app and command-line tool for the AJAZZ AK820 Pro on Linux, macOS, and Windows.**
 
 I wanted to avoid installing the sketchy Chinese utility AJAZZ recommends, so I made this small, inspectable alternative to talk to the keyboard directly. For my setup, fewer mystery installers feels like the safer choice. Your keyboard gets its colors without inviting an unknown app along for the ride.
 
 Adjust RGB lighting and sleep behavior, sync the keyboard clock, and put a still image on its 128 × 128 screen. The desktop app gives you a visual color picker and controls. The CLI makes the same core settings easy to script.
+
+[![Build and release](https://github.com/sdpursley/AJAZZ_AK820_PRO_Custom_App/actions/workflows/release.yml/badge.svg)](https://github.com/sdpursley/AJAZZ_AK820_PRO_Custom_App/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/sdpursley/AJAZZ_AK820_PRO_Custom_App)](https://github.com/sdpursley/AJAZZ_AK820_PRO_Custom_App/releases/latest)
 
 ![AK820 app window](screenshot.png)
 
@@ -19,15 +22,20 @@ Adjust RGB lighting and sleep behavior, sync the keyboard clock, and put a still
 
 Keyboard changes are sent when you apply them. In the desktop app, lighting and sleep settings are written with **Save** (Space). Moving a control alone does not write settings to the keyboard.
 
-## Requirements
+## Download
 
-- Linux, Qt 6, and a C++17 compiler with `qmake6` and `make` for building.
-- A compatible AJAZZ AK820 Pro connected over USB.
-- A one-time udev rule installation so your user can access the keyboard.
+Download a platform build from [GitHub Releases](https://github.com/sdpursley/AJAZZ_AK820_PRO_Custom_App/releases/latest).
 
-The included Arch Linux package recipe lists its runtime dependencies and installs a desktop launcher.
+- **Windows:** Download `ak820-windows-x64.zip`, extract it, and launch `ak820.exe`.
+- **macOS Apple silicon:** Download `ak820-macos-arm64.zip`, open the app, and approve it in Gatekeeper if prompted. This community build is not signed or notarized.
+- **macOS Intel:** Download `ak820-macos-x64.zip`, open the app, and approve it in Gatekeeper if prompted. This community build is not signed or notarized.
+- **Linux:** Download `ak820-linux-x86_64.tar.gz` and run the included `ak820` binary. It requires Qt 6 and HIDAPI runtime libraries. Arch users can instead build and install the included package.
 
-## Build and run
+Windows and macOS builds are new and need testing with physical keyboards. Linux is the currently hardware-tested platform.
+
+## Build and run on Linux
+
+Requirements: Qt 6, HIDAPI, a C++17 compiler, `qmake6`, and `make`.
 
 ```sh
 ./bin/build
@@ -35,7 +43,7 @@ The included Arch Linux package recipe lists its runtime dependencies and instal
 ./build/ak820
 ```
 
-To build and install the Arch package (from an Arch-based system):
+To install the Arch package on an Arch-based system:
 
 ```sh
 ./bin/install

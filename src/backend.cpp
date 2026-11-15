@@ -3,8 +3,12 @@
 #include "keyboard.h"
 
 #include <QDateTime>
+#ifdef Q_OS_LINUX
 #include <QDBusConnection>
 #include <QDBusMessage>
+#else
+#include <QFileDialog>
+#endif
 #include <QImage>
 #include <QMetaObject>
 #include <QRandomGenerator>
@@ -103,6 +107,7 @@ void Backend::setImagePath(const QString &path) {
 }
 
 void Backend::chooseImage() {
+#ifdef Q_OS_LINUX
     auto bus = QDBusConnection::sessionBus();
     const QString token = QStringLiteral("ak820%1").arg(QRandomGenerator::global()->bounded(1000000));
     QString sender = bus.baseService();
@@ -124,6 +129,13 @@ void Backend::chooseImage() {
         m_status = tr("Could not open the file chooser (%1).").arg(reply.errorMessage());
         emit changed();
     }
+#else
+    const QString path = QFileDialog::getOpenFileName(
+        nullptr, tr("Choose image"), m_imagePath,
+        tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All files (*)"));
+    if (!path.isEmpty())
+        setImagePath(path);
+#endif
 }
 
 void Backend::portalResponse(uint response, QVariantMap results) {

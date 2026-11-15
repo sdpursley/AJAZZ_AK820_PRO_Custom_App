@@ -6,21 +6,13 @@
 #include "keyboard.h"
 
 #include <QCoreApplication>
-#include <QDeadlineTimer>
 #include <QDir>
-#include <QFile>
+#include <QLockFile>
 #include <QThread>
+#include <hidapi/hidapi.h>
 
 #include <algorithm>
-#include <cerrno>
 #include <cstring>
-
-#include <fcntl.h>
-#include <linux/hidraw.h>
-#include <poll.h>
-#include <sys/file.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
 
 namespace {
 
@@ -31,13 +23,9 @@ constexpr uint8_t kStart = 0x18;
 constexpr uint8_t kCommit = 0x02;
 constexpr uint8_t kFinish = 0xf0;
 
-const uint8_t kControlDesc[] = {
-    0x06, 0x13, 0xff, 0x09, 0x01, 0xa1, 0x01, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x08,
-    0x95, 0x40, 0x09, 0x02, 0x81, 0x02, 0x09, 0x03, 0x91, 0x02, 0x0a, 0x00, 0xff, 0xb1, 0x02, 0xc0};
-const uint8_t kDataDesc[] = {
-    0x06, 0x68, 0xff, 0x09, 0x61, 0xa1, 0x01, 0x09, 0x62, 0x15, 0x00, 0x26, 0xff, 0x00,
-    0x95, 0x40, 0x75, 0x08, 0x81, 0x02, 0x09, 0x63, 0x15, 0x00, 0x26, 0xff, 0x00, 0x96,
-    0x00, 0x10, 0x75, 0x08, 0x91, 0x02, 0xc0};
+constexpr unsigned short kVendorId = 0x0c45;
+constexpr unsigned short kControlUsagePage = 0xff13;
+constexpr unsigned short kDataUsagePage = 0xff68;
 
 QString say(const char *text) { return QCoreApplication::translate("Keyboard", text); }
 
@@ -47,36 +35,27 @@ const char *kModeIds[] = {
     "flowing", "pulsating", "tilt", "shuttle"};
 
 struct Paths {
-    QString control;
-    QString data;
+    QByteArray control;
+    QByteArray data;
     bool saw = false;
     bool otherFirmware = false;
 };
 
 Paths findKeyboard() {
     Paths found;
-    const QDir dir("/sys/class/hidraw");
-    for (const QString &name : dir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
-        const QString base = dir.filePath(name) + "/device";
-        QFile ueventFile(base + "/uevent");
-        if (!ueventFile.open(QIODevice::ReadOnly))
-            continue;
-        const QString uevent = QString::fromUtf8(ueventFile.readAll());
-        if (!uevent.contains("00000C45") || !uevent.contains("AK820"))
-            continue;
-        if (!uevent.contains("00008009") && !uevent.contains("0000800A"))
+    auto *devices = hid_enumerate(kVendorId, 0);
+    for (auto *device = devices; device; device = device->next) {
+        if (device->product_id != 0x8009 && device->product_id != 0x800a)
             continue;
         found.saw = true;
-        QFile descFile(base + "/report_descriptor");
-        if (!descFile.open(QIODevice::ReadOnly))
+        if (!device->path)
             continue;
-        const QByteArray desc = descFile.readAll();
-        const QString dev = "/dev/" + name;
-        if (desc == QByteArray(reinterpret_cast<const char *>(kControlDesc), sizeof kControlDesc))
-            found.control = dev;
-        else if (desc == QByteArray(reinterpret_cast<const char *>(kDataDesc), sizeof kDataDesc))
-            found.data = dev;
+        if (device->usage_page == kControlUsagePage)
+            found.control = device->path;
+        else if (device->usage_page == kDataUsagePage)
+            found.data = device->path;
     }
+    hid_free_enumeration(devices);
     found.otherFirmware = found.saw && (found.control.isEmpty() || found.data.isEmpty());
     return found;
 }
@@ -86,30 +65,28 @@ public:
     ~Session() { close(); }
 
     Attempt open() {
+        if (hid_init() != 0)
+            return {false, false, say("Could not initialize USB access.")};
+        m_initialized = true;
         const Paths paths = findKeyboard();
         if (paths.otherFirmware)
             return {false, false, say("This AK820 uses a firmware this app does not write to.")};
         if (!paths.saw)
             return {false, false, say("Plug the AK820 Pro in with its USB cable.")};
 
-        m_lock.setFileName(QDir::tempPath() + "/ak820-0c45.lock");
-        if (!m_lock.open(QIODevice::ReadWrite))
-            return {false, true, say("Could not lock the keyboard.")};
-        const auto deadline = QDeadlineTimer(12000);
-        while (flock(m_lock.handle(), LOCK_EX | LOCK_NB) != 0) {
-            if (errno != EWOULDBLOCK && errno != EAGAIN)
-                return {false, true, say("Could not lock the keyboard.")};
-            if (deadline.hasExpired())
-                return {false, true, say("Another keyboard operation is running.")};
-            QThread::msleep(50);
-        }
-        m_locked = true;
+        if (!m_lock.tryLock(12000))
+            return {false, true, say("Another keyboard operation is running.")};
 
-        m_control = ::open(paths.control.toLocal8Bit().constData(), O_RDWR | O_CLOEXEC);
-        m_data = ::open(paths.data.toLocal8Bit().constData(), O_RDWR | O_CLOEXEC);
-        if (m_control < 0 || m_data < 0) {
-            const QString why = QString::fromLocal8Bit(strerror(errno));
+        m_control = hid_open_path(paths.control.constData());
+        m_data = hid_open_path(paths.data.constData());
+        if (!m_control || !m_data) {
+            const wchar_t *detail = hid_error(nullptr);
+            const QString why = detail ? QString::fromWCharArray(detail) : QString();
+#ifdef Q_OS_LINUX
             return {false, false, say("Cannot open the keyboard (%1). Run bin/setup-udev from the project and replug the cable.").arg(why)};
+#else
+            return {false, false, say("Cannot open the keyboard (%1). Close other keyboard software and reconnect the keyboard.").arg(why)};
+#endif
         }
         return {true, true, {}};
     }
@@ -118,13 +95,14 @@ public:
         uint8_t wire[65] = {};
         memcpy(wire + 1, packet.data(), 64);
         QThread::msleep(35);
-        if (ioctl(m_control, HIDIOCSFEATURE(65), wire) < 0) {
-            *error = say("Could not talk to the keyboard (%1).").arg(QString::fromLocal8Bit(strerror(errno)));
+        if (hid_send_feature_report(m_control, wire, sizeof wire) < 0) {
+            *error = say("Could not talk to the keyboard (%1).")
+                         .arg(QString::fromWCharArray(hid_error(m_control)));
             return false;
         }
         QThread::msleep(50);
         uint8_t response[65] = {};
-        const int got = ioctl(m_control, HIDIOCGFEATURE(65), response);
+        const int got = hid_get_feature_report(m_control, response, sizeof response);
         if (got < 64) {
             *error = say("The keyboard did not answer.");
             return false;
@@ -190,23 +168,26 @@ public:
     }
 
     void close() {
-        if (m_control >= 0)
-            ::close(m_control);
-        if (m_data >= 0)
-            ::close(m_data);
-        m_control = m_data = -1;
-        if (m_locked && m_lock.handle() >= 0)
-            flock(m_lock.handle(), LOCK_UN);
-        m_locked = false;
+        if (m_control)
+            hid_close(m_control);
+        if (m_data)
+            hid_close(m_data);
+        m_control = m_data = nullptr;
+        if (m_lock.isLocked())
+            m_lock.unlock();
+        if (m_initialized) {
+            hid_exit();
+            m_initialized = false;
+        }
     }
 
-    int dataFd() const { return m_data; }
+    hid_device *dataDevice() const { return m_data; }
 
 private:
-    QFile m_lock;
-    bool m_locked = false;
-    int m_control = -1;
-    int m_data = -1;
+    QLockFile m_lock{QDir::tempPath() + "/ak820-0c45.lock"};
+    bool m_initialized = false;
+    hid_device *m_control = nullptr;
+    hid_device *m_data = nullptr;
 };
 
 bool inRange(int value, int max) { return value >= 0 && value <= max; }
@@ -412,20 +393,18 @@ Attempt Keyboard::uploadStill(const QByteArray &rgb888) {
     if (ok)
         ok = session.command(controlPacket(0x72, 1, chunks), &error);
     if (ok) {
-        uint8_t junk[256];
-        pollfd drain{session.dataFd(), POLLIN, 0};
-        while (poll(&drain, 1, 0) > 0 && ::read(session.dataFd(), junk, sizeof junk) > 0)
-            ;
+        uint8_t junk[4096];
+        while (hid_read_timeout(session.dataDevice(), junk, sizeof junk, 0) > 0) {}
         for (int i = 0; ok && i < chunks; ++i) {
             uint8_t report[kChunk + 1] = {};
             memcpy(report + 1, frame.constData() + i * kChunk, kChunk);
-            if (::write(session.dataFd(), report, sizeof report) < kChunk) {
-                error = say("Could not send the screen (%1).").arg(QString::fromLocal8Bit(strerror(errno)));
+            if (hid_write(session.dataDevice(), report, sizeof report) < kChunk) {
+                error = say("Could not send the screen (%1).")
+                            .arg(QString::fromWCharArray(hid_error(session.dataDevice())));
                 ok = false;
                 break;
             }
-            pollfd wait{session.dataFd(), POLLIN, 0};
-            if (poll(&wait, 1, 1000) <= 0 || ::read(session.dataFd(), junk, sizeof junk) <= 0) {
+            if (hid_read_timeout(session.dataDevice(), junk, sizeof junk, 1000) <= 0) {
                 error = say("The screen did not acknowledge the image. Send it again.");
                 ok = false;
             }

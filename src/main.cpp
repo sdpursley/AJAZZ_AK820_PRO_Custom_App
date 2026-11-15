@@ -1,7 +1,7 @@
 // ak820 — lighting, sleep, clock, and screen for the AJAZZ AK820 Pro.
 
 #include <QDateTime>
-#include <QGuiApplication>
+#include <QApplication>
 #include <QIcon>
 #include <QImage>
 #include <QJsonDocument>
@@ -134,7 +134,7 @@ int main(int argc, char *argv[]) {
     if (!gui)
         qputenv("QT_QPA_PLATFORM", "offscreen");
 
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     app.setApplicationName("ak820");
     app.setApplicationVersion("0.1.0");
     app.setDesktopFileName("ak820");

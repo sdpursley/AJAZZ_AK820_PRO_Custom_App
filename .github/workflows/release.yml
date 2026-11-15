@@ -1,0 +1,134 @@
+name: Build and release
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            asset: ak820-linux-x86_64.tar.gz
+          - platform: windows-x64
+            runner: windows-2022
+            asset: ak820-windows-x64.zip
+          - platform: macos-arm64
+            runner: macos-26
+            asset: ak820-macos-arm64.zip
+          - platform: macos-x64
+            runner: macos-26-intel
+            asset: ak820-macos-x64.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools libhidapi-dev
+
+      - name: Build Linux
+        if: runner.os == 'Linux'
+        run: |
+          ./bin/build
+          mkdir -p dist
+          cp build/ak820 README.md LICENSE dist/
+          tar -czf "$RUNNER_TEMP/${{ matrix.asset }}" -C dist .
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Qt for Windows
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.3
+          host: windows
+          arch: win64_msvc2022_64
+          archives: qtbase qtdeclarative
+
+      - name: Install HIDAPI for Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install hidapi:x64-windows
+          "HIDAPI_ROOT=$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')/installed/x64-windows" >> $env:GITHUB_ENV
+
+      - name: Build and package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build | Out-Null
+          Push-Location build
+          qmake ..\ak820.pro
+          nmake
+          Pop-Location
+          $stage = "$env:RUNNER_TEMP\ak820-windows"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          windeployqt --qmldir "$env:GITHUB_WORKSPACE\src" --dir $stage "$env:GITHUB_WORKSPACE\build\release\ak820.exe"
+          Copy-Item "$env:GITHUB_WORKSPACE\build\release\ak820.exe" $stage
+          Copy-Item "$env:HIDAPI_ROOT\bin\hidapi.dll" $stage
+          Copy-Item README.md, LICENSE, screenshot.png $stage
+          Compress-Archive -Path "$stage\*" -DestinationPath "$env:RUNNER_TEMP/${{ matrix.asset }}"
+
+      - name: Install Qt and HIDAPI for macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install qt@6 hidapi
+          echo "QT_ROOT=$(brew --prefix qt@6)" >> "$GITHUB_ENV"
+          echo "HIDAPI_ROOT=$(brew --prefix hidapi)" >> "$GITHUB_ENV"
+          echo "$(brew --prefix qt@6)/bin" >> "$GITHUB_PATH"
+
+      - name: Build and package macOS
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p build
+          cd build
+          "$QT_ROOT/bin/qmake" ../ak820.pro
+          make -j"$(sysctl -n hw.ncpu)"
+          cd ..
+          APP="build/ak820.app"
+          "$QT_ROOT/bin/macdeployqt" "$APP" -qmldir=src -libpath="$HIDAPI_ROOT/lib"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$RUNNER_TEMP/${{ matrix.asset }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: ${{ runner.temp }}/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
