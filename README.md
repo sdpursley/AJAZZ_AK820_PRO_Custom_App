@@ -2,7 +2,7 @@
 
 **A Linux desktop app and command-line tool for the AJAZZ AK820 Pro keyboard.**
 
-Adjust RGB lighting and sleep behavior, sync the keyboard clock, and put a still image on its 128 × 128 screen. The desktop app gives you a visual color picker and controls; the CLI makes the same core settings easy to script.
+Adjust RGB lighting and sleep behavior, sync the keyboard clock, and put a still image on its 128 × 128 screen. The desktop app gives you a visual color picker and controls. The CLI makes the same core settings easy to script.
 
 ![AK820 app window](screenshot.png)
 
@@ -11,11 +11,11 @@ Adjust RGB lighting and sleep behavior, sync the keyboard clock, and put a still
 - Set a static lighting color or choose a lighting mode, brightness, speed, direction, and rainbow option.
 - Choose when the keyboard goes to sleep.
 - Sync the keyboard clock with your computer.
-- Send an image to the keyboard screen. Images are center-cropped to a square and scaled to 128 × 128 pixels; this replaces custom screen slot 1.
+- Send an image to the keyboard screen. Images are center-cropped to a square and scaled to 128 × 128 pixels. This replaces custom screen slot 1.
 - Use the graphical interface or JSON-friendly command-line commands.
 - Localized interface, currently including English and Danish.
 
-Keyboard changes are sent when you apply them. In the desktop app, lighting and sleep settings are written with **Save** (Space); moving a control alone does not write settings to the keyboard.
+Keyboard changes are sent when you apply them. In the desktop app, lighting and sleep settings are written with **Save** (Space). Moving a control alone does not write settings to the keyboard.
 
 ## Requirements
 
@@ -29,7 +29,7 @@ The included Arch Linux package recipe lists its runtime dependencies and instal
 
 ```sh
 ./bin/build
-./bin/setup-udev  # one time; unplug and reconnect the keyboard afterward
+./bin/setup-udev  # one time, then unplug and reconnect the keyboard
 ./build/ak820
 ```
 
@@ -41,7 +41,7 @@ To build and install the Arch package (from an Arch-based system):
 
 ## Command line
 
-The built executable is `build/ak820`. Add `--json` to get a single JSON result object; commands return exit status 0 on success and 1 on failure.
+The built executable is `build/ak820`. Add `--json` to get a single JSON result object. Commands return exit status 0 on success and 1 on failure.
 
 ```sh
 ./build/ak820 probe --json
