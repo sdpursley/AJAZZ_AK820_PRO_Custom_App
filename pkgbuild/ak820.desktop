@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=AK820
+Name[da]=AK820
+Comment=Lighting and screen for the AJAZZ AK820 Pro
+Comment[da]=Lys og skærm til AJAZZ AK820 Pro
+Exec=ak820
+Icon=ak820
+Terminal=false
+Categories=Utility;
+StartupWMClass=ak820

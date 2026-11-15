@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+sudo install -Dm644 "$ROOT/pkgbuild/70-ak820.rules" /etc/udev/rules.d/70-ak820.rules
+sudo udevadm control --reload
+sudo udevadm trigger --subsystem-match=hidraw
+echo "Unplug the AK820 Pro and plug it back in, then open ak820."
