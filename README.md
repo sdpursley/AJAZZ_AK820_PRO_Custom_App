@@ -1,6 +1,8 @@
-# AK820
+# AJAZZ_AK820_PRO_Custom_App
 
 **A Linux desktop app and command-line tool for the AJAZZ AK820 Pro keyboard.**
+
+I wanted to avoid installing the sketchy Chinese utility AJAZZ recommends, so I made this small, inspectable alternative to talk to the keyboard directly. For my setup, fewer mystery installers feels like the safer choice. Your keyboard gets its colors without inviting an unknown app along for the ride.
 
 Adjust RGB lighting and sleep behavior, sync the keyboard clock, and put a still image on its 128 × 128 screen. The desktop app gives you a visual color picker and controls. The CLI makes the same core settings easy to script.
 
