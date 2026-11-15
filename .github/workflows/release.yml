@@ -80,6 +80,12 @@ jobs:
           $stage = "$env:RUNNER_TEMP\ak820-windows"
           New-Item -ItemType Directory -Force $stage | Out-Null
           windeployqt --qmldir "$env:GITHUB_WORKSPACE\src" --dir $stage "$env:GITHUB_WORKSPACE\build\release\ak820.exe"
+          New-Item -ItemType Directory -Force "$stage\qml" | Out-Null
+          Copy-Item -Path "$env:QT_ROOT_DIR\qml\QtQuick" -Destination "$stage\qml" -Recurse
+          Copy-Item -Path "$env:QT_ROOT_DIR\qml\QtQml" -Destination "$stage\qml" -Recurse
+          if (!(Test-Path "$stage\qml\QtQuick\Controls\Material\qmldir")) {
+            throw "The Qt Quick Controls Material QML module was not packaged."
+          }
           Copy-Item "$env:GITHUB_WORKSPACE\build\release\ak820.exe" $stage
           Copy-Item "$env:HIDAPI_ROOT\bin\hidapi.dll" $stage
           Copy-Item README.md, LICENSE, screenshot.png $stage
@@ -103,6 +109,8 @@ jobs:
           cd ..
           APP="build/ak820.app"
           "$QT_ROOT/bin/macdeployqt" "$APP" -qmldir=src -libpath="$HIDAPI_ROOT/lib"
+          test -f "$APP/Contents/Resources/qml/QtQuick/Controls/Material/qmldir"
+          find "$APP/Contents/Frameworks" -name 'libhidapi*.dylib' -print -quit | grep -q .
           ditto -c -k --sequesterRsrc --keepParent "$APP" "$RUNNER_TEMP/${{ matrix.asset }}"
 
       - name: Upload build artifact
@@ -128,6 +136,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          sha256sum release-assets/* > release-assets/SHA256SUMS
           gh release create "$GITHUB_REF_NAME" release-assets/* \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \

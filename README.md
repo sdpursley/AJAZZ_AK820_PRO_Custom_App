@@ -26,9 +26,9 @@ Keyboard changes are sent when you apply them. In the desktop app, lighting and 
 
 Download a platform build from [GitHub Releases](https://github.com/sdpursley/AJAZZ_AK820_PRO_Custom_App/releases/latest).
 
-- **Windows:** Download `ak820-windows-x64.zip`, extract it, and launch `ak820.exe`.
-- **macOS Apple silicon:** Download `ak820-macos-arm64.zip`, open the app, and approve it in Gatekeeper if prompted. This community build is not signed or notarized.
-- **macOS Intel:** Download `ak820-macos-x64.zip`, open the app, and approve it in Gatekeeper if prompted. This community build is not signed or notarized.
+- **Windows:** Download `ak820-windows-x64.zip`, extract it, and launch `ak820.exe`. Windows may show a SmartScreen warning because the app is not code signed.
+- **macOS Apple silicon:** Download `ak820-macos-arm64.zip`, open the app, and approve it in Gatekeeper if prompted. This community build is not signed with a Developer ID certificate or notarized.
+- **macOS Intel:** Download `ak820-macos-x64.zip`, open the app, and approve it in Gatekeeper if prompted. This community build is not signed with a Developer ID certificate or notarized.
 - **Linux:** Download `ak820-linux-x86_64.tar.gz` and run the included `ak820` binary. It requires Qt 6 and HIDAPI runtime libraries. Arch users can instead build and install the included package.
 
 Windows and macOS builds are new and need testing with physical keyboards. Linux is the currently hardware-tested platform.
